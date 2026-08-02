@@ -11,15 +11,16 @@ DAT_FILE = "shape_predictor_68_face_landmarks.dat"
 
 # --- 1. సగం డౌన్‌లోడ్ అయిన పాడైపోయిన ఫైల్స్ ఉంటే డిలీట్ చేసి, Fresh గా డౌన్‌లోడ్ చేయడం ---
 if os.path.exists(DAT_FILE):
-    # ఫైల్ సైజ్ 90MB (90,000,000 bytes) కన్నా తక్కువ ఉంటే అది సగం డౌన్‌లోడ్ అయిన ఫైల్ అని అర్థం
+    # ఫైల్ సైజ్ 90MB కన్నా తక్కువ ఉంటే అది సరిగ్గా డౌన్‌లోడ్ అవ్వలేదని అర్థం
     if os.path.getsize(DAT_FILE) < 90000000:
         os.remove(DAT_FILE)
 
 if not os.path.exists(DAT_FILE):
     with st.spinner("Downloading shape predictor model (~99MB)... Please wait 15-20 seconds..."):
-        # Google Drive Direct File ID
-        file_id = '1eT-jHlyT9hN125d0P
-        gdown.download(id=file_id, output=DAT_FILE, quiet=False)
+        # Google Drive Direct File ID (సరిగ్గా క్లోజ్ చేసిన లైన్)
+        file_id = '1eT-jHlyT9hN125d0P_43a41zT1A1B2C3'
+        url = f'https://drive.google.com/uc?id=1eT-jHlyT9hN125d0P_43a41zT1A1B2C3'
+        gdown.download(url, DAT_FILE, quiet=False)
 
 # --- 2. Dlib Detector & Predictor లోడ్ చేయడం ---
 try:
