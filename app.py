@@ -1,35 +1,39 @@
-import cv2
-import dlib
-import numpy as np
-import streamlit as st
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, RTCConfiguration
-from scipy.spatial import distance as dist
 import os
+import shutil
 import urllib.request
 import bz2
 
-# --- 1. మోడల్ ఫైల్ లేకపోతే ఆటోమేటిక్‌గా డౌన్‌లోడ్ చేసుకునే లాజిక్ ---
 DAT_FILE = "shape_predictor_68_face_landmarks.dat"
+BZ2_FILE = "shape_predictor_68_face_landmarks.dat.bz2"
 
 if not os.path.exists(DAT_FILE):
     with st.spinner("Downloading shape predictor model... Please wait a moment..."):
-        url = "http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2"
-        bz2_file = "shape_predictor_68_face_landmarks.dat.bz2"
-        urllib.request.urlretrieve(url, bz2_file)
+       
+        url = "https://raw.githubusercontent.com/italojs/facial-landmarks-recognition/master/shape_predictor_68_face_landmarks.dat.bz2"
         
-        # BZ2 ఫైల్‌ని Extract చేయడం
-        with bz2.BZ2File(bz2_file, 'rb') as source, open(DAT_FILE, 'wb') as dest:
-            dest.write(source.read())
-        os.remove(bz2_file)
+        req = urllib.request.Request(
+            url, 
+            headers={'User-Agent': 'Mozilla/5.0'}
+        )
+        
+        with urllib.request.urlopen(req) as response, open(BZ2_FILE, 'wb') as out_file:
+            shutil.copyfileobj(response, out_file)
 
-# --- 2. Dlib Detector & Predictor లోడ్ చేయడం ---
+        # Decompress bz2 file safely
+        with bz2.BZ2File(BZ2_FILE, 'rb') as source, open(DAT_FILE, 'wb') as dest:
+            shutil.copyfileobj(source, dest)
+
+        if os.path.exists(BZ2_FILE):
+            os.remove(BZ2_FILE)
+            
+# --- 2. Dlib Detector & Predictor ---
 try:
     detector = dlib.get_frontal_face_detector()
     predictor = dlib.shape_predictor(DAT_FILE)
 except Exception as e:
     st.error(f"Error loading shape predictor file: {e}")
 
-# --- 3. Eye Aspect Ratio (EAR) గణన ---
+# --- 3. Eye Aspect Ratio (EAR)
 def eye_aspect_ratio(eye):
     A = dist.euclidean(eye[1], eye[5])
     B = dist.euclidean(eye[2], eye[4])
@@ -37,14 +41,14 @@ def eye_aspect_ratio(eye):
     ear = (A + B) / (2.0 * C)
     return ear
 
-# డ్రౌజినెస్ థ్రెషోల్డ్స్
+డ్స్
 EYE_AR_THRESH = 0.25
 EYE_AR_CONSEC_FRAMES = 20
 
 (lStart, lEnd) = (42, 48)
 (rStart, rEnd) = (36, 42)
 
-# --- 4. Streamlit WebRTC వీడియో ప్రొసెసింగ్ ---
+# --- 4. Streamlit WebRTC--
 class DrowsinessTransformer(VideoTransformerBase):
     def __init__(self):
         self.counter = 0
@@ -85,7 +89,7 @@ class DrowsinessTransformer(VideoTransformerBase):
 
         return img
 
-# --- 5. UI డిజైన్ ---
+# --- 5. UI -
 st.title("🚗 Driver Drowsiness Detection System")
 st.write("Click **START** below to enable your camera and check for drowsiness in real-time.")
 
