@@ -1,21 +1,92 @@
+import cv2
 import numpy as np
 import streamlit as st
+from streamlit_webrtc import RTCConfiguration, WebRtcMode, webrtc_streamer
 
 st.set_page_config(
     page_title="Driver Drowsiness Detection", page_icon="🚗", layout="centered"
 )
 
-st.title("🚗 Driver Drowsiness Detection System")
+st.title("🚗 Live Driver Drowsiness Detection System")
 st.write(
-    "ఈ అప్లికేషన్ ద్వారా మీ కళ్ళను గమనించి నిద్రమత్తును గుర్తించవచ్చు."
+    "క్రింద ఉన్న **START** బటన్ క్లిక్ చేసి బ్రౌజర్‌లో కెమెరా పర్మిషన్ Allow చేయండి."
 )
 
-# Streamlit Native Camera Input (ఇది క్లౌడ్‌లో 100% పర్ఫెక్ట్‌గా పనిచేస్తుంది, ఎలాంటి బ్లాక్ స్క్రీన్‌లు రావు)
-img_file_buffer = st.camera_input("కెమెరాను ఆన్ చేయడానికి ఇక్కడ క్లిక్ చేయండి")
+# STUN Server Settings (లైవ్ వీడియో క్లౌడ్‌లో ప్లే అవ్వడానికి)
+RTC_CONFIGURATION = RTCConfiguration(
+    {
+        "iceServers": [
+            {"urls": ["stun:stun.l.google.com:19302"]},
+            {"urls": ["stun:stun1.l.google.com:19302"]},
+        ]
+    }
+)
 
-if img_file_buffer is not None:
-    st.success("✅ ఫోటో విజయవంతంగా క్యాప్చర్ చేయబడింది!")
-    st.image(img_file_buffer, caption="Captured Image", use_column_width=True)
-    st.info(
-        "డిటెక్షన్ ప్రాసెస్ విజయవంతం అయింది. డ్రైవర్ సురక్షితంగా ఉన్నారు!"
-    )
+# Haar Cascades
+face_cascade = cv2.CascadeClassifier(
+    cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+)
+eye_cascade = cv2.CascadeClassifier(
+    cv2.data.haarcascades + "haarcascade_eye.xml"
+)
+
+
+class DrowsinessTransformer:
+
+    def __init__(self):
+        self.counter = 0
+
+    def recv(self, frame):
+        img = frame.to_ndarray(format="bgr24")
+        img = cv2.flip(img, 1)  # Mirror View
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+        eyes_found = False
+
+        for x, y, w, h in faces:
+            cv2.rectangle(img, (x, y), (x + w, y + h), (255, 0, 0), 2)
+            roi_gray = gray[y : y + h, x : x + w]
+            roi_color = img[y : y + h, x : x + w]
+
+            eyes = eye_cascade.detectMultiScale(roi_gray, 1.1, 3)
+
+            if len(eyes) > 0:
+                eyes_found = True
+                for ex, ey, ew, eh in eyes:
+                    cv2.rectangle(
+                        roi_color, (ex, ey), (ex + ew, ey + eh), (0, 255, 0), 2
+                    )
+
+        # నిద్రమత్తు లాజిక్
+        if len(faces) == 0 or not eyes_found:
+            self.counter += 1
+        else:
+            self.counter = 0
+
+        # ALERT Text గీయడం
+        if self.counter >= 15:
+            cv2.putText(
+                img,
+                "DROWSINESS ALERT!",
+                (30, 50),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1.0,
+                (0, 0, 255),
+                3,
+            )
+
+        import av
+
+        return av.VideoFrame.from_ndarray(img, format="bgr24")
+
+
+# Streamlit WebRTC Live Video Stream
+webrtc_streamer(
+    key="live-drowsiness-detection",
+    mode=WebRtcMode.SENDRECV,
+    rtc_configuration=RTC_CONFIGURATION,
+    video_processor_factory=DrowsinessTransformer,
+    media_stream_constraints={"video": True, "audio": False},
+    async_processing=True,
+)
