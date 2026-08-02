@@ -1,7 +1,6 @@
 import cv2
 import numpy as np
 import streamlit as st
-from streamlit_webrtc import RTCConfiguration, WebRtcMode, webrtc_streamer
 
 st.set_page_config(
     page_title="Driver Drowsiness Detection", page_icon="🚗", layout="centered"
@@ -9,20 +8,10 @@ st.set_page_config(
 
 st.title("🚗 Driver Drowsiness Detection System")
 st.write(
-    "ముందుగా బ్రౌజర్‌లో Camera Permission **Allow** చేసి, క్రింద START పై క్లిక్ చేయండి."
+    "క్రింది కెమెరా ద్వారా ఫోటో క్యాప్చర్ చేసి డ్రైవర్ నిద్రమత్తును తనిఖీ చేయండి."
 )
 
-# STUN Server Settings (Cloud Connection సరిగ్గా అవ్వడానికి)
-RTC_CONFIGURATION = RTCConfiguration(
-    {
-        "iceServers": [
-            {"urls": ["stun:stun.l.google.com:19302"]},
-            {"urls": ["stun:stun1.l.google.com:19302"]},
-            {"urls": ["stun:stun2.l.google.com:19302"]},
-        ]
-    }
-)
-
+# Haar Cascade Classifiers
 face_cascade = cv2.CascadeClassifier(
     cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
 )
@@ -30,60 +19,41 @@ eye_cascade = cv2.CascadeClassifier(
     cv2.data.haarcascades + "haarcascade_eye.xml"
 )
 
+# Streamlit Native Camera Input (ఏ ఎర్రర్స్ రావు)
+img_file_buffer = st.camera_input("Take a photo to check drowsiness")
 
-class VideoProcessor:
+if img_file_buffer is not None:
+    # Image ని OpenCV format లోకి మార్చడం
+    bytes_data = img_file_buffer.getvalue()
+    cv2_img = cv2.imdecode(
+        np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR
+    )
 
-    def __init__(self):
-        self.counter = 0
+    gray = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2GRAY)
+    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
 
-    def recv(self, frame):
-        img = frame.to_ndarray(format="bgr24")
-        img = cv2.flip(img, 1)
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    eyes_found = False
 
-        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
-        eyes_found = False
+    for x, y, w, h in faces:
+        cv2.rectangle(cv2_img, (x, y), (x + w, y + h), (255, 0, 0), 2)
+        roi_gray = gray[y : y + h, x : x + w]
+        roi_color = cv2_img[y : y + h, x : x + w]
 
-        for x, y, w, h in faces:
-            cv2.rectangle(img, (x, y), (x + w, y + h), (255, 0, 0), 2)
-            roi_gray = gray[y : y + h, x : x + w]
-            roi_color = img[y : y + h, x : x + w]
+        eyes = eye_cascade.detectMultiScale(roi_gray, 1.1, 3)
 
-            eyes = eye_cascade.detectMultiScale(roi_gray, 1.1, 3)
+        if len(eyes) > 0:
+            eyes_found = True
+            for ex, ey, ew, eh in eyes:
+                cv2.rectangle(
+                    roi_color, (ex, ey), (ex + ew, ey + eh), (0, 255, 0), 2
+                )
 
-            if len(eyes) > 0:
-                eyes_found = True
-                for ex, ey, ew, eh in eyes:
-                    cv2.rectangle(
-                        roi_color, (ex, ey), (ex + ew, ey + eh), (0, 255, 0), 2
-                    )
-
-        if len(faces) == 0 or not eyes_found:
-            self.counter += 1
-        else:
-            self.counter = 0
-
-        if self.counter >= 15:
-            cv2.putText(
-                img,
-                "DROWSINESS ALERT!",
-                (30, 50),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                1.0,
-                (0, 0, 255),
-                3,
-            )
-
-        import av
-
-        return av.VideoFrame.from_ndarray(img, format="bgr24")
-
-
-webrtc_streamer(
-    key="drowsiness-detection",
-    mode=WebRtcMode.SENDRECV,
-    rtc_configuration=RTC_CONFIGURATION,
-    video_processor_factory=VideoProcessor,
-    media_stream_constraints={"video": True, "audio": False},
-    async_processing=True,
-)
+    # Result చూపించడం
+    if len(faces) == 0:
+        st.warning("⚠️ ముఖం సరిగ్గా కనిపించడం లేదు. కెమెరా వైపు చూడండి.")
+    elif not eyes_found:
+        st.error(
+            "🚨 **DROWSINESS ALERT!** కళ్ళు మూసుకుని ఉన్నాయి లేదా నిద్రమత్తులో ఉన్నారు!"
+        )
+    else:
+        st.success("✅ **SAFE!** కళ్ళు తెరిచి ఉన్నాయి. డ్రైవర్ మెలకువగానే ఉన్నారు.")
