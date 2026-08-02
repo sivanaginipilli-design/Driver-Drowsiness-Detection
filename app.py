@@ -83,7 +83,6 @@ RTC_CONFIGURATION = {
         {"urls": ["stun:stun.l.google.com:19302"]}
     ]
 }
-)
 webrtc_streamer(
     key="drowsiness",
     rtc_configuration=RTC_CONFIGURATION,
