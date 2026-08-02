@@ -4,6 +4,10 @@ import streamlit as st
 import mediapipe as mp
 from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, RTCConfiguration
 from scipy.spatial import distance as dist
+from streamlit_webrtc import VideoProcessorBase
+
+class DrowsinessTransformer(VideoProcessorBase):
+    ...
 
 # --- 1. MediaPipe Face Mesh Init ---
 mp_face_mesh = mp.solutions.face_mesh
@@ -77,10 +81,9 @@ st.write("Click **START** below to enable your camera and check for drowsiness i
 RTC_CONFIGURATION = RTCConfiguration(
     {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
 )
-
-webrtc_streamer(
+webrtc_ctx = webrtc_streamer(
     key="drowsiness-detection",
     rtc_configuration=RTC_CONFIGURATION,
     media_stream_constraints={"video": True, "audio": False},
-    video_transformer_factory=DrowsinessTransformer,
+    video_processor_factory=DrowsinessTransformer,
 )
