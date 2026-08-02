@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import streamlit as st
 import mediapipe as mp
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, RTCConfiguration
+from streamlit_webrtc import webrtc_streamer, RTCConfiguration
 from scipy.spatial import distance as dist
 
 # --- 1. MediaPipe Face Mesh Init ---
@@ -80,7 +80,6 @@ RTC_CONFIGURATION = RTCConfiguration(
 
 webrtc_streamer(
     key="drowsiness-detection",
-    video_transformer_factory=DrowsinessTransformer,
     rtc_configuration=RTC_CONFIGURATION,
     media_stream_constraints={"video": True, "audio": False},
 )
