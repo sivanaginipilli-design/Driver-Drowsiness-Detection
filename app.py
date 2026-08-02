@@ -1,46 +1,20 @@
-import os
 import cv2
-import dlib
 import numpy as np
-import urllib.request
 import streamlit as st
+import mediapipe as mp
 from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, RTCConfiguration
 from scipy.spatial import distance as dist
 
-DAT_FILE = "shape_predictor_68_face_landmarks.dat"
+# --- 1. MediaPipe Face Mesh Init ---
+mp_face_mesh = mp.solutions.face_mesh
+face_mesh = mp_face_mesh.FaceMesh(
+    max_num_faces=1,
+    refine_landmarks=True,
+    min_detection_confidence=0.5,
+    min_tracking_confidence=0.5
+)
 
-# Direct Reliable Mirror Link for shape predictor
-MODEL_URL = "https://raw.githubusercontent.com/Cointreau/Facial-Landmarks-Detection/master/shape_predictor_68_face_landmarks.dat"
-
-# --- 1. మోడల్ ఫైల్ డౌన్‌లోడ్ & సైజ్ వాలిడేషన్ ---
-if not os.path.exists(DAT_FILE) or os.path.getsize(DAT_FILE) < 90000000:
-    if os.path.exists(DAT_FILE):
-        os.remove(DAT_FILE)
-        
-    with st.spinner("Downloading shape predictor model (~99MB)... Please wait..."):
-        try:
-            req = urllib.request.Request(
-                MODEL_URL, 
-                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-            )
-            with urllib.request.urlopen(req) as response, open(DAT_FILE, 'wb') as out_file:
-                # Chunk-by-chunk stream download
-                while True:
-                    chunk = response.read(1024 * 1024) # 1MB chunks
-                    if not chunk:
-                        break
-                    out_file.write(chunk)
-        except Exception as e:
-            st.error(f"Download Error: {e}")
-
-# --- 2. Dlib Detector & Predictor లోడ్ చేయడం ---
-try:
-    detector = dlib.get_frontal_face_detector()
-    predictor = dlib.shape_predictor(DAT_FILE)
-except Exception as err:
-    st.error(f"Error loading shape predictor file: {err}")
-
-# --- 3. Eye Aspect Ratio (EAR) గణన ---
+# --- 2. Eye Aspect Ratio (EAR) గణన ---
 def eye_aspect_ratio(eye):
     A = dist.euclidean(eye[1], eye[5])
     B = dist.euclidean(eye[2], eye[4])
@@ -48,54 +22,55 @@ def eye_aspect_ratio(eye):
     ear = (A + B) / (2.0 * C)
     return ear
 
+# MediaPipe కోసం కంటి ల్యాండ్‌మార్క్ ఇండెక్స్‌లు
+LEFT_EYE_IDXS = [362, 385, 387, 263, 373, 380]
+RIGHT_EYE_IDXS = [33, 160, 158, 133, 153, 144]
+
 EYE_AR_THRESH = 0.25
-EYE_AR_CONSEC_FRAMES = 20
+EYE_AR_CONSEC_FRAMES = 15
 
-(lStart, lEnd) = (42, 48)
-(rStart, rEnd) = (36, 42)
-
-# --- 4. Streamlit WebRTC వీడియో ప్రొసెసింగ్ ---
+# --- 3. Streamlit WebRTC వీడియో ప్రొసెసింగ్ ---
 class DrowsinessTransformer(VideoTransformerBase):
     def __init__(self):
         self.counter = 0
 
     def transform(self, frame):
         img = frame.to_ndarray(format="bgr24")
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        rects = detector(gray, 0)
+        h, w, _ = img.shape
+        rgb_frame = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        
+        results = face_mesh.process(rgb_frame)
 
-        for rect in rects:
-            shape = predictor(gray, rect)
-            shape_np = np.zeros((68, 2), dtype="int")
-            for i in range(0, 68):
-                shape_np[i] = (shape.part(i).x, shape.part(i).y)
+        if results.multi_face_landmarks:
+            for face_landmarks in results.multi_face_landmarks:
+                landmarks = face_landmarks.landmark
+                
+                # కళ్ళ పాయింట్లను పిక్సెల్ కోఆర్డినేట్స్‌గా మార్చడం
+                left_eye = np.array([(int(landmarks[idx].x * w), int(landmarks[idx].y * h)) for idx in LEFT_EYE_IDXS])
+                right_eye = np.array([(int(landmarks[idx].x * w), int(landmarks[idx].y * h)) for idx in RIGHT_EYE_IDXS])
 
-            leftEye = shape_np[lStart:lEnd]
-            rightEye = shape_np[rStart:rEnd]
-            leftEAR = eye_aspect_ratio(leftEye)
-            rightEAR = eye_aspect_ratio(rightEye)
+                leftEAR = eye_aspect_ratio(left_eye)
+                rightEAR = eye_aspect_ratio(right_eye)
+                ear = (leftEAR + rightEAR) / 2.0
 
-            ear = (leftEAR + rightEAR) / 2.0
+                # కళ్ళకు గ్రీన్ బాక్స్ అవుట్‌లైన్ డ్రా చేయడం
+                cv2.polylines(img, [left_eye], True, (0, 255, 0), 1)
+                cv2.polylines(img, [right_eye], True, (0, 255, 0), 1)
 
-            leftEyeHull = cv2.convexHull(leftEye)
-            rightEyeHull = cv2.convexHull(rightEye)
-            cv2.drawContours(img, [leftEyeHull], -1, (0, 255, 0), 1)
-            cv2.drawContours(img, [rightEyeHull], -1, (0, 255, 0), 1)
+                if ear < EYE_AR_THRESH:
+                    self.counter += 1
+                    if self.counter >= EYE_AR_CONSEC_FRAMES:
+                        cv2.putText(img, "DROWSINESS ALERT!", (10, 50),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 3)
+                else:
+                    self.counter = 0
 
-            if ear < EYE_AR_THRESH:
-                self.counter += 1
-                if self.counter >= EYE_AR_CONSEC_FRAMES:
-                    cv2.putText(img, "DROWSINESS ALERT!", (10, 30),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-            else:
-                self.counter = 0
-
-            cv2.putText(img, f"EAR: {ear:.2f}", (300, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                cv2.putText(img, f"EAR: {ear:.2f}", (w - 150, 50),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
         return img
 
-# --- 5. UI డిజైన్ ---
+# --- 4. UI డిజైన్ ---
 st.title("🚗 Driver Drowsiness Detection System")
 st.write("Click **START** below to enable your camera and check for drowsiness in real-time.")
 
