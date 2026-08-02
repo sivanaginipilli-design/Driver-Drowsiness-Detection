@@ -6,7 +6,7 @@ from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfigurati
 from scipy.spatial import distance as dist
 import av
 
-# --- 1. MediaPipe Face Mesh Init ---
+# --- 1. MediaPipe Face Mesh Init --
 mp_face_mesh = mp.solutions.face_mesh
 face_mesh = mp_face_mesh.FaceMesh(
     max_num_faces=1,
