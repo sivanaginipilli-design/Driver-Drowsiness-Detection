@@ -1,7 +1,5 @@
 import os
-import shutil
 import urllib.request
-import bz2
 import cv2
 import dlib
 import numpy as np
@@ -9,23 +7,17 @@ import streamlit as st
 from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, RTCConfiguration
 from scipy.spatial import distance as dist
 
-# --- 1. మోడల్ ఫైల్ లేకపోతే ఆటోమేటిక్‌గా డౌన్‌లోడ్ చేసుకునే లాజిక్ ---
+# --- 1. డైరెక్ట్ `.dat` ఫైల్‌ని సులభంగా డౌన్‌లోడ్ చేసే లాజిక్ ---
 DAT_FILE = "shape_predictor_68_face_landmarks.dat"
-BZ2_FILE = "shape_predictor_68_face_landmarks.dat.bz2"
 
-if not os.path.exists(DAT_FILE):
-    with st.spinner("Downloading shape predictor model... Please wait a moment..."):
-        url = "https://raw.githubusercontent.com/italojs/facial-landmarks-recognition/master/shape_predictor_68_face_landmarks.dat.bz2"
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        
-        with urllib.request.urlopen(req) as response, open(BZ2_FILE, 'wb') as out_file:
-            shutil.copyfileobj(response, out_file)
+# Hugging Face నుంచి డైరెక్ట్ Uncompressed .dat ఫైల్ URL
+MODEL_URL = "https://huggingface.co/italojs/facial-landmarks-recognition/resolve/main/shape_predictor_68_face_landmarks.dat"
 
-        with bz2.BZ2File(BZ2_FILE, 'rb') as source, open(DAT_FILE, 'wb') as dest:
-            shutil.copyfileobj(source, dest)
-
-        if os.path.exists(BZ2_FILE):
-            os.remove(BZ2_FILE)
+if not os.path.exists(DAT_FILE) or os.path.getsize(DAT_FILE) < 90000000:  # ఫైల్ సైజ్ సరిగ్గా ఉందో లేదో చెక్ చేస్తుంది
+    with st.spinner("Downloading shape predictor model (~99MB)... Please wait a moment..."):
+        req = urllib.request.Request(MODEL_URL, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req) as response, open(DAT_FILE, 'wb') as out_file:
+            out_file.write(response.read())
 
 # --- 2. Dlib Detector & Predictor లోడ్ చేయడం ---
 try:
