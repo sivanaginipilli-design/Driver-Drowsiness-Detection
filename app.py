@@ -1,5 +1,5 @@
 import os
-import urllib.request
+import requests
 import cv2
 import dlib
 import numpy as np
@@ -7,17 +7,36 @@ import streamlit as st
 from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, RTCConfiguration
 from scipy.spatial import distance as dist
 
-# --- 1. డైరెక్ట్ `.dat` ఫైల్‌ని సులభంగా డౌన్‌లోడ్ చేసే లాజిక్ ---
+# --- 1. మోడల్ ఫైల్ లేకపోతే సేఫ్‌గా డౌన్‌లోడ్ చేసుకునే లాజిక్ ---
 DAT_FILE = "shape_predictor_68_face_landmarks.dat"
 
-# Hugging Face నుంచి డైరెక్ట్ Uncompressed .dat ఫైల్ URL
-MODEL_URL = "https://huggingface.co/italojs/facial-landmarks-recognition/resolve/main/shape_predictor_68_face_landmarks.dat"
+# Direct working GitHub Release URL
+MODEL_URL = "https://github.com/italojs/facial-landmarks-recognition/raw/master/shape_predictor_68_face_landmarks.dat.bz2"
 
-if not os.path.exists(DAT_FILE) or os.path.getsize(DAT_FILE) < 90000000:  # ఫైల్ సైజ్ సరిగ్గా ఉందో లేదో చెక్ చేస్తుంది
+if not os.path.exists(DAT_FILE):
     with st.spinner("Downloading shape predictor model (~99MB)... Please wait a moment..."):
-        req = urllib.request.Request(MODEL_URL, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req) as response, open(DAT_FILE, 'wb') as out_file:
-            out_file.write(response.read())
+        try:
+            # First download the compressed bz2 file safely
+            bz2_file = "model.bz2"
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+            
+            response = requests.get(MODEL_URL, headers=headers, stream=True)
+            response.raise_for_status()
+            
+            with open(bz2_file, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+            
+            # Decompress bz2 file
+            import bz2
+            with bz2.BZ2File(bz2_file, 'rb') as source, open(DAT_FILE, 'wb') as dest:
+                dest.write(source.read())
+            
+            if os.path.exists(bz2_file):
+                os.remove(bz2_file)
+        except Exception as e:
+            st.error(f"Download failed: {e}")
 
 # --- 2. Dlib Detector & Predictor లోడ్ చేయడం ---
 try:
