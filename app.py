@@ -1,26 +1,37 @@
 import os
 import cv2
 import dlib
-import gdown
 import numpy as np
+import urllib.request
 import streamlit as st
 from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, RTCConfiguration
 from scipy.spatial import distance as dist
 
 DAT_FILE = "shape_predictor_68_face_landmarks.dat"
 
-# --- 1. సగం డౌన్‌లోడ్ అయిన పాడైపోయిన ఫైల్స్ ఉంటే డిలీట్ చేసి, Fresh గా డౌన్‌లోడ్ చేయడం ---
-if os.path.exists(DAT_FILE):
-    # ఫైల్ సైజ్ 90MB కన్నా తక్కువ ఉంటే అది సరిగ్గా డౌన్‌లోడ్ అవ్వలేదని అర్థం
-    if os.path.getsize(DAT_FILE) < 90000000:
-        os.remove(DAT_FILE)
+# Direct Reliable Mirror Link for shape predictor
+MODEL_URL = "https://raw.githubusercontent.com/Cointreau/Facial-Landmarks-Detection/master/shape_predictor_68_face_landmarks.dat"
 
-if not os.path.exists(DAT_FILE):
-    with st.spinner("Downloading shape predictor model (~99MB)... Please wait 15-20 seconds..."):
-        # Google Drive Direct File ID (సరిగ్గా క్లోజ్ చేసిన లైన్)
-        file_id = '1eT-jHlyT9hN125d0P_43a41zT1A1B2C3'
-        url = f'https://drive.google.com/uc?id=1eT-jHlyT9hN125d0P_43a41zT1A1B2C3'
-        gdown.download(url, DAT_FILE, quiet=False)
+# --- 1. మోడల్ ఫైల్ డౌన్‌లోడ్ & సైజ్ వాలిడేషన్ ---
+if not os.path.exists(DAT_FILE) or os.path.getsize(DAT_FILE) < 90000000:
+    if os.path.exists(DAT_FILE):
+        os.remove(DAT_FILE)
+        
+    with st.spinner("Downloading shape predictor model (~99MB)... Please wait..."):
+        try:
+            req = urllib.request.Request(
+                MODEL_URL, 
+                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+            )
+            with urllib.request.urlopen(req) as response, open(DAT_FILE, 'wb') as out_file:
+                # Chunk-by-chunk stream download
+                while True:
+                    chunk = response.read(1024 * 1024) # 1MB chunks
+                    if not chunk:
+                        break
+                    out_file.write(chunk)
+        except Exception as e:
+            st.error(f"Download Error: {e}")
 
 # --- 2. Dlib Detector & Predictor లోడ్ చేయడం ---
 try:
