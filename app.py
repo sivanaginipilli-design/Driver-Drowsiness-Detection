@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import streamlit as st
 import mediapipe as mp
-from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfiguration,WebRTCMode
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfiguration
 from scipy.spatial import distance as dist
 import av
 
@@ -72,24 +72,19 @@ class DrowsinessTransformer(VideoProcessorBase):
 st.title("🚗 Driver Drowsiness Detection System")
 st.write("Click **START** below to enable your camera and check for drowsiness in real-time.")
 
-RTC_CONFIG = RTCConfiguration(
-    {
-        "iceServers": [
-        {"urls": ["stun:stun.l.google.com:19302"]},
-        {"urls": ["stun:stun.1.l.google.com:19302"]},
-        {"urls": ["stun:stun.2.l.google.com:19302"]},
+RTC_CONFIGURATION = {
+    "iceServers": [
+        {"urls": ["stun:stun.l.google.com:19302"]}
     ]
 }
-)
 
 webrtc_streamer(
-    key="drowsiness-detection-v2",
-    video_processor_factory=DrowsinessTransformer,
-    rtc_configuration=RTC_CONFIG,
+    key="drowsiness",
+    rtc_configuration=RTC_CONFIGURATION,
     media_stream_constraints={
         "video": True,
         "audio": False,
     },
-   
+    video_processor_factory=DrowsinessTransformer,
     async_processing=True,
 )
