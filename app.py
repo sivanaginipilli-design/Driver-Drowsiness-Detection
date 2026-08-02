@@ -1,26 +1,25 @@
 import cv2
 import mediapipe as mp
 import numpy as np
-import scipy.spatial.distance as dist
-import streamlit as st
+import pygame
+from scipy.spatial import distance as dist
 
-# Page Configuration
-st.set_page_config(
-    page_title="Driver Drowsiness Detection System",
-    page_icon="🚗",
-    layout="centered",
-)
+# 1. Pygame Audio Alert Setup (అలారం సౌండ్ సెటప్)
+pygame.mixer.init()
+try:
+    pygame.mixer.music.load("alarm.wav")  # మీ అలారం సౌండ్ ఫైల్ పేరు
+except:
+    print(
+        "⚠️ Warning: 'alarm.wav' ఫైల్ దొరకలేదు. సౌండ్ లేకుండా రన్ అవుతుంది."
+    )
 
-st.title("🚗 Driver Drowsiness Detection System")
-st.markdown("Real-time drowsiness detection using OpenCV & MediaPipe")
-
-# Eye Landmark Indices for MediaPipe Face Mesh
+# 2. Eye Landmark Indices for MediaPipe
 LEFT_EYE = [362, 385, 387, 263, 373, 380]
 RIGHT_EYE = [33, 160, 158, 133, 153, 144]
 
 
+# Eye Aspect Ratio (EAR) గెక్కించే ఫంక్షన్
 def calculate_ear(eye_landmarks):
-    # Calculate Eye Aspect Ratio (EAR)
     A = dist.euclidean(eye_landmarks[1], eye_landmarks[5])
     B = dist.euclidean(eye_landmarks[2], eye_landmarks[4])
     C = dist.euclidean(eye_landmarks[0], eye_landmarks[3])
@@ -28,16 +27,7 @@ def calculate_ear(eye_landmarks):
     return ear
 
 
-# Sidebar Parameters
-st.sidebar.header("⚙️ Configuration Settings")
-EAR_THRESHOLD = st.sidebar.slider(
-    "EAR Threshold", min_value=0.15, max_value=0.35, value=0.22, step=0.01
-)
-CONSEC_FRAMES = st.sidebar.slider(
-    "Alert Frame Count", min_value=10, max_value=50, value=20, step=5
-)
-
-# MediaPipe Setup
+# 3. MediaPipe Face Mesh Initialization
 mp_face_mesh = mp.solutions.face_mesh
 face_mesh = mp_face_mesh.FaceMesh(
     max_num_faces=1,
@@ -46,81 +36,104 @@ face_mesh = mp_face_mesh.FaceMesh(
     min_tracking_confidence=0.5,
 )
 
-# Control State
-run = st.checkbox("Start Webcam / కెమెరా ప్లే చేయి")
-FRAME_WINDOW = st.image([])
-alert_placeholder = st.empty()
+# Parameters (పరిమితులు)
+EAR_THRESHOLD = (
+    0.22  # EAR ఈ విలువ కంటే తగ్గితే కళ్ళు మూసుకున్నట్లు (Drowsy)
+)
+CONSEC_FRAMES = 20  # వరుసగా ఎన్ని ఫ్రేమ్‌లు కళ్ళు మూస్తే అలారం మోగాలి
 
-counter = 0
+COUNTER = 0
+ALARM_ON = False
 
-if run:
-    cap = cv2.VideoCapture(0)
+# 4. Camera Stream Initialization
+cap = cv2.VideoCapture(0)
 
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            st.error("Camera access failed.")
-            break
+print("🚀 Driver Drowsiness Detection Start అయ్యింది. నిష్క్రమించడానికి 'q' నొక్కండి.")
 
-        frame = cv2.flip(frame, 1)
-        h, w, _ = frame.shape
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = face_mesh.process(rgb_frame)
+while cap.isOpened():
+    ret, frame = cap.read()
+    if not ret:
+        print(" Camera access అవ్వడం లేదు.")
+        break
 
-        drowsy = False
+    frame = cv2.flip(frame, 1)  # Selfie Mode (Mirroring)
+    h, w, _ = frame.shape
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-        if results.multi_face_landmarks:
-            for face_landmarks in results.multi_face_landmarks:
-                # Extract landmark coordinates
-                landmarks = np.array(
-                    [(lm.x * w, lm.y * h) for lm in face_landmarks.landmark]
-                )
+    # Face landmarks ని డిటెక్ట్ చేయడం
+    results = face_mesh.process(rgb_frame)
 
-                left_eye = landmarks[LEFT_EYE]
-                right_eye = landmarks[RIGHT_EYE]
+    if results.multi_face_landmarks:
+        for face_landmarks in results.multi_face_landmarks:
+            landmarks = np.array(
+                [(lm.x * w, lm.y * h) for lm in face_landmarks.landmark]
+            )
 
-                left_ear = calculate_ear(left_eye)
-                right_ear = calculate_ear(right_eye)
+            # కంటి ల్యాండ్‌మార్క్స్ తీయడం
+            left_eye = landmarks[LEFT_EYE]
+            right_eye = landmarks[RIGHT_EYE]
 
-                avg_ear = (left_ear + right_ear) / 2.0
+            # కంటి EAR లెక్కింపు
+            left_ear = calculate_ear(left_eye)
+            right_ear = calculate_ear(right_eye)
+            avg_ear = (left_ear + right_ear) / 2.0
 
-                # Display EAR Value on Frame
-                cv2.putText(
-                    frame,
-                    f"EAR: {avg_ear:.2f}",
-                    (30, 50),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.8,
-                    (0, 255, 0),
-                    2,
-                )
+            # కంటి భాగాలను స్క్రీన్ పై గీయడం (Visual Confirmation)
+            cv2.polylines(
+                frame, [left_eye.astype(np.int32)], True, (0, 255, 0), 1
+            )
+            cv2.polylines(
+                frame, [right_eye.astype(np.int32)], True, (0, 255, 0), 1
+            )
 
-                # Check Drowsiness
-                if avg_ear < EAR_THRESHOLD:
-                    counter += 1
-                    if counter >= CONSEC_FRAMES:
-                        drowsy = True
-                        cv2.putText(
-                            frame,
-                            "DROWSINESS ALERT!",
-                            (30, 100),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            1.0,
-                            (0, 0, 255),
-                            3,
-                        )
-                else:
-                    counter = 0
+            # EAR విలువ స్క్రీన్ పై చూపించడం
+            cv2.putText(
+                frame,
+                f"EAR: {avg_ear:.2f}",
+                (30, 40),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (255, 255, 255),
+                2,
+            )
 
-        # Convert back to RGB for Streamlit rendering
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        FRAME_WINDOW.image(frame_rgb)
+            # నిద్రమత్తును తనిఖీ చేసే లాజిక్
+            if avg_ear < EAR_THRESHOLD:
+                COUNTER += 1
 
-        if drowsy:
-            alert_placeholder.error("🚨 ALERT: Driver is feeling sleepy!")
-        else:
-            alert_placeholder.empty()
+                if COUNTER >= CONSEC_FRAMES:
+                    # నిద్రపోతున్నట్టు గుర్తిస్తే
+                    cv2.putText(
+                        frame,
+                        "DROWSINESS ALERT! WAKE UP!",
+                        (30, 90),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.8,
+                        (0, 0, 255),
+                        3,
+                    )
 
-    cap.release()
-else:
-    st.info("Check the box above to start the webcam monitoring.")
+                    # అలారం మోగించడం
+                    if not ALARM_ON:
+                        ALARM_ON = True
+                        try:
+                            pygame.mixer.music.play(-1)  # Loop లో సౌండ్ వస్తుంది
+                        except:
+                            pass
+            else:
+                COUNTER = 0
+                if ALARM_ON:
+                    ALARM_ON = False
+                    pygame.mixer.music.stop()  # అలారం ఆపివేయడం
+
+    # Window స్క్రీన్ చూపించడం
+    cv2.imshow("Driver Drowsiness Detection System", frame)
+
+    # 'q' కీ నొక్కితే ఆగిపోతుంది
+    if cv2.waitKey(1) & 0xFF == ord("q"):
+        break
+
+# Clean up resources
+cap.release()
+cv2.destroyAllWindows()
+pygame.mixer.quit()
