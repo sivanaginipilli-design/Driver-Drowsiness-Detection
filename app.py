@@ -78,12 +78,19 @@ class DrowsinessTransformer(VideoTransformerBase):
 st.title("🚗 Driver Drowsiness Detection System")
 st.write("Click **START** below to enable your camera and check for drowsiness in real-time.")
 
-RTC_CONFIGURATION = RTCConfiguration(
-    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+RTC_CONFIGURATION = {
+    "iceServers": [
+        {"urls": ["stun:stun.l.google.com:19302"]}
+    ]
+}
 )
-webrtc_ctx = webrtc_streamer(
-    key="drowsiness-detection",
+webrtc_streamer(
+    key="drowsiness",
     rtc_configuration=RTC_CONFIGURATION,
-    media_stream_constraints={"video": True, "audio": False},
+    media_stream_constraints={
+        "video": True,
+        "audio": False,
+    },
     video_processor_factory=DrowsinessTransformer,
+    async_processing=True,
 )
