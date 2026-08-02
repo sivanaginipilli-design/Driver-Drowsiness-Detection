@@ -37,18 +37,18 @@ def video_frame_callback(frame: av.VideoFrame) -> av.VideoFrame:
         # Face chuttu green box
         cv2.rectangle(img, (x, y), (x+w, y+h), (0, 255, 0), 2)
         
-        # Region of Interest (ROI) for eyes inside face
-            roi_gray = gray[y:y+h, x:x+w]
-            roi_color = img[y:y+h, x:x+w]
-            eyes = eye_cascade.detectMultiScale(roi_gray)
-            
-            for (ex, ey, ew, eh) in eyes:
-                cv2.rectangle(roi_color, (ex, ey), (ex+ew, ey+eh), (255, 0, 0), 2)
+        # Region of Interest (ROI) for eyes inside face (Indentation corrected)
+        roi_gray = gray[y:y+h, x:x+w]
+        roi_color = img[y:y+h, x:x+w]
+        eyes = eye_cascade.detectMultiScale(roi_gray)
+        
+        for (ex, ey, ew, eh) in eyes:
+            cv2.rectangle(roi_color, (ex, ey), (ex+ew, ey+eh), (255, 0, 0), 2)
 
     # Processed frame ni malli WebRTC ki pampinchadam
     return av.VideoFrame.from_ndarray(img, format="bgr24")
 
-# WebRTC Streamer (Cloud deployment ki idi best)
+# WebRTC Streamer
 webrtc_streamer(
     key="drowsiness",
     mode=WebRtcMode.SENDRECV,
