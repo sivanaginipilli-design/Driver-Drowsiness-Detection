@@ -1,42 +1,25 @@
 import os
-import requests
 import cv2
 import dlib
+import gdown
 import numpy as np
 import streamlit as st
 from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, RTCConfiguration
 from scipy.spatial import distance as dist
 
-# --- 1. మోడల్ ఫైల్ లేకపోతే సేఫ్‌గా డౌన్‌లోడ్ చేసుకునే లాజిక్ ---
 DAT_FILE = "shape_predictor_68_face_landmarks.dat"
 
-# Direct working GitHub Release URL
-MODEL_URL = "https://github.com/italojs/facial-landmarks-recognition/raw/master/shape_predictor_68_face_landmarks.dat.bz2"
+# --- 1. సగం డౌన్‌లోడ్ అయిన పాడైపోయిన ఫైల్స్ ఉంటే డిలీట్ చేసి, Fresh గా డౌన్‌లోడ్ చేయడం ---
+if os.path.exists(DAT_FILE):
+    # ఫైల్ సైజ్ 90MB (90,000,000 bytes) కన్నా తక్కువ ఉంటే అది సగం డౌన్‌లోడ్ అయిన ఫైల్ అని అర్థం
+    if os.path.getsize(DAT_FILE) < 90000000:
+        os.remove(DAT_FILE)
 
 if not os.path.exists(DAT_FILE):
-    with st.spinner("Downloading shape predictor model (~99MB)... Please wait a moment..."):
-        try:
-            # First download the compressed bz2 file safely
-            bz2_file = "model.bz2"
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-            
-            response = requests.get(MODEL_URL, headers=headers, stream=True)
-            response.raise_for_status()
-            
-            with open(bz2_file, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-            
-            # Decompress bz2 file
-            import bz2
-            with bz2.BZ2File(bz2_file, 'rb') as source, open(DAT_FILE, 'wb') as dest:
-                dest.write(source.read())
-            
-            if os.path.exists(bz2_file):
-                os.remove(bz2_file)
-        except Exception as e:
-            st.error(f"Download failed: {e}")
+    with st.spinner("Downloading shape predictor model (~99MB)... Please wait 15-20 seconds..."):
+        # Google Drive Direct File ID
+        file_id = '1eT-jHlyT9hN125d0P
+        gdown.download(id=file_id, output=DAT_FILE, quiet=False)
 
 # --- 2. Dlib Detector & Predictor లోడ్ చేయడం ---
 try:
