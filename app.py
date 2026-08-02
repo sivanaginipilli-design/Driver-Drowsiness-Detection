@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import streamlit as st
 import mediapipe as mp
-from streamlit_webrtc import webRtcMode
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfiguration,WebRTCMode
 from scipy.spatial import distance as dist
 import av
 
@@ -83,8 +83,7 @@ RTC_CONFIG = RTCConfiguration(
 )
 
 webrtc_streamer(
-    key="drowsiness-detection-v1",
-    model=WebRtcMode.SENDRECV,
+    key="drowsiness-detection-v2",
     video_processor_factory=DrowsinessTransformer,
     rtc_configuration=RTC_CONFIG,
     media_stream_constraints={
