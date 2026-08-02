@@ -1,16 +1,28 @@
 import cv2
 import numpy as np
 import streamlit as st
-from streamlit_webrtc import WebRtcMode, webrtc_streamer
+from streamlit_webrtc import RTCConfiguration, WebRtcMode, webrtc_streamer
 
 st.set_page_config(
     page_title="Driver Drowsiness Detection", page_icon="🚗", layout="centered"
 )
 
 st.title("🚗 Driver Drowsiness Detection System")
-st.write("వెబ్‌క్యామ్ ద్వారా లైవ్ డిటెక్షన్ ప్రాసెస్:")
+st.write(
+    "ముందుగా బ్రౌజర్‌లో Camera Permission **Allow** చేసి, క్రింద START పై క్లిక్ చేయండి."
+)
 
-# Cascade Classifiers Load చేయడం
+# STUN Server Settings (Cloud Connection సరిగ్గా అవ్వడానికి)
+RTC_CONFIGURATION = RTCConfiguration(
+    {
+        "iceServers": [
+            {"urls": ["stun:stun.l.google.com:19302"]},
+            {"urls": ["stun:stun1.l.google.com:19302"]},
+            {"urls": ["stun:stun2.l.google.com:19302"]},
+        ]
+    }
+)
+
 face_cascade = cv2.CascadeClassifier(
     cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
 )
@@ -19,7 +31,6 @@ eye_cascade = cv2.CascadeClassifier(
 )
 
 
-# Video Stream Processing Class
 class VideoProcessor:
 
     def __init__(self):
@@ -27,7 +38,7 @@ class VideoProcessor:
 
     def recv(self, frame):
         img = frame.to_ndarray(format="bgr24")
-        img = cv2.flip(img, 1)  # Mirror Effect
+        img = cv2.flip(img, 1)
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
         faces = face_cascade.detectMultiScale(gray, 1.3, 5)
@@ -47,13 +58,11 @@ class VideoProcessor:
                         roi_color, (ex, ey), (ex + ew, ey + eh), (0, 255, 0), 2
                     )
 
-        # నిద్రమత్తు గుర్తింపు లాజిక్
         if len(faces) == 0 or not eyes_found:
             self.counter += 1
         else:
             self.counter = 0
 
-        # ALERT Text గీయడం
         if self.counter >= 15:
             cv2.putText(
                 img,
@@ -70,13 +79,11 @@ class VideoProcessor:
         return av.VideoFrame.from_ndarray(img, format="bgr24")
 
 
-# Streamlit WebRTC Component
 webrtc_streamer(
     key="drowsiness-detection",
     mode=WebRtcMode.SENDRECV,
-    rtc_configuration={
-        "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
-    },
+    rtc_configuration=RTC_CONFIGURATION,
     video_processor_factory=VideoProcessor,
     media_stream_constraints={"video": True, "audio": False},
+    async_processing=True,
 )
