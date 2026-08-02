@@ -1,38 +1,36 @@
-import cv2
 import streamlit as st
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
+import cv2
+import av
 
 st.set_page_config(page_title="Driver Drowsiness Detection", layout="wide")
 
 st.title("🚗 Driver Drowsiness Detection System")
-st.write("Camera start cheyadaniki kindha unna checkbox ni select cheyandi.")
+st.write("Kindha unna **START** button meeda click chesi camera access allow cheyandi.")
 
-# UI Checkbox
-run_camera = st.checkbox("Start Camera Feed")
-FRAME_WINDOW = st.image([])
+# Browser camera network connection settings
+RTC_CONFIGURATION = RTCConfiguration(
+    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+)
 
-if run_camera:
-    # Camera initialize (0 ante integrated laptop camera)
-    cap = cv2.VideoCapture(0)
+# Webcam processing frame function
+def video_frame_callback(frame: av.VideoFrame) -> av.VideoFrame:
+    img = frame.to_ndarray(format="bgr24")
 
-    if not cap.isOpened():
-        st.error("Camera access cheyadam kudaratledhu. Device index check cheyandi.")
+    # =========================================================
+    # MEERU YOLOV8 / OPENCV DROWSINESS DETECTION CODE IKKADA ADDEYANDI
+    # Example:
+    # img = process_drowsiness(img)
+    # =========================================================
 
-    while run_camera:
-        ret, frame = cap.read()
-        if not ret:
-            st.warning("Camera nundi frame capture avvatledhu.")
-            break
+    return av.VideoFrame.from_ndarray(img, format="bgr24")
 
-        # Color Conversion (OpenCV BGR ni Streamlit RGB ki marustham)
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-        # -------------------------------------------------------------
-        # MEERU DRIVER DROWSINESS DETECTION MODEL LOGIC IKKADA ADDEYANDI
-        # -------------------------------------------------------------
-
-        # Process aina frame ni screen pyna chupisthundhi
-        FRAME_WINDOW.image(frame_rgb)
-
-    cap.release()
-else:
-    st.info("Camera off lo undhi. Start cheyadaniki checkbox click cheyandi.")
+# Browser Streamlit WebRTC Component
+webrtc_streamer(
+    key="drowsiness-detection",
+    mode=WebRtcMode.SENDRECV,
+    rtc_configuration=RTC_CONFIGURATION,
+    video_frame_callback=video_frame_callback,
+    media_stream_constraints={"video": True, "audio": False},
+    async_processing=True,
+)
