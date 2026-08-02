@@ -3,4 +3,3 @@ opencv-python-headless
 numpy
 mediapipe
 scipy
-streamlit-option-menu
