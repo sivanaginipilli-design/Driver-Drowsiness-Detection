@@ -4,5 +4,4 @@ av==12.3.0
 opencv-python-headless==4.10.0.84
 dlib
 numpy
-scipy
-imutils
+mediapipe
