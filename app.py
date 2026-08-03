@@ -7,66 +7,66 @@ import streamlit as st
 from scipy.spatial import distance as dist
 from imutils import face_utils
 
+st.set_page_config(page_title="Driver Drowsiness Detection", layout="centered")
+
+st.title("🚗 Driver Drowsiness Detection System")
+st.text("Webcam Image-based Detection System")
+
 # -------------------------------------------------------------
-# 1. HUGGING FACE NUNDI MODEL DOWNLOAD CHESE LOGIC
+# 1. HUGGING FACE NUNDI MODEL DOWNLOAD LOGIC
 # -------------------------------------------------------------
 MODEL_PATH = "shape_predictor_68_face_landmarks.dat"
-MODEL_URL = "https://huggingface.co/datasets/sivanagini-p/dlib-model/resolve/main/shape_predictor_68_face_landmarks.dat"
+# Direct resolve URL with follow redirects
+MODEL_URL = "https://huggingface.co/datasets/sivanagini-p/dlib-model/resolve/main/shape_predictor_68_face_landmarks.dat?download=true"
 
 @st.cache_resource
 def load_model():
     if not os.path.exists(MODEL_PATH):
-        with st.spinner("Downloading shape predictor model from Hugging Face... Please wait..."):
-            urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
+        with st.spinner("Downloading shape predictor model... Please wait..."):
+            req = urllib.request.Request(
+                MODEL_URL, 
+                headers={'User-Agent': 'Mozilla/5.0'}
+            )
+            with urllib.request.urlopen(req) as response, open(MODEL_PATH, 'wb') as out_file:
+                out_file.write(response.read())
+                
     return dlib.get_frontal_face_detector(), dlib.shape_predictor(MODEL_PATH)
 
 # -------------------------------------------------------------
-# 2. EYE ASPECT RATIO (EAR) CALCULATE CHESE FUNCTION
+# 2. EYE ASPECT RATIO (EAR) FUNCTION
 # -------------------------------------------------------------
 def eye_aspect_ratio(eye):
-    # Vertical landmarks distances
     A = dist.euclidean(eye[1], eye[5])
     B = dist.euclidean(eye[2], eye[4])
-    # Horizontal landmark distance
     C = dist.euclidean(eye[0], eye[3])
-    # EAR calculation
     ear = (A + B) / (2.0 * C)
     return ear
 
-# -------------------------------------------------------------
-# 3. STREAMLIT APP UI & LOGIC
-# -------------------------------------------------------------
-st.title("🚗 Driver Drowsiness Detection System")
-st.text("Real-time webcam feed through OpenCV & Dlib")
+try:
+    detector, predictor = load_model()
+except Exception as e:
+    st.error(f"Model Load Cheyadam lo Error vachindi: {e}")
+    st.stop()
 
-# Load model and detectors
-detector, predictor = load_model()
-
-# Eye landmarks indices (68-point model)
 (lStart, lEnd) = face_utils.FACIAL_LANDMARKS_IDXS["left_eye"]
 (rStart, rEnd) = face_utils.FACIAL_LANDMARKS_IDXS["right_eye"]
 
 EAR_THRESHOLD = 0.25
-CONSEC_FRAMES = 20
-COUNTER = 0
 
-run = st.checkbox('Start Camera')
-FRAME_WINDOW = st.image([])
+# Streamlit Camera Input (Works seamlessly on Browser/Cloud)
+img_file_buffer = st.camera_input("Take a photo to check Drowsiness")
 
-camera = cv2.VideoCapture(0)
-
-while run:
-    ret, frame = camera.read()
-    if not ret:
-        st.error("Camera access cheyaleka potunnam!")
-        break
-
-    frame = cv2.resize(frame, (640, 480))
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+if img_file_buffer is not None:
+    # Convert image buffer to OpenCV format
+    bytes_data = img_file_buffer.getvalue()
+    cv2_img = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
     
-    # Detect faces
+    gray = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2GRAY)
     rects = detector(gray, 0)
 
+    if len(rects) == 0:
+        st.warning("Face detect avvaledu! Memory clear ga unte malli try cheyandi.")
+    
     for rect in rects:
         shape = predictor(gray, rect)
         shape = face_utils.shape_to_np(shape)
@@ -78,27 +78,22 @@ while run:
         rightEAR = eye_aspect_ratio(rightEye)
         ear = (leftEAR + rightEAR) / 2.0
 
-        # Draw contours around eyes
         leftEyeHull = cv2.convexHull(leftEye)
         rightEyeHull = cv2.convexHull(rightEye)
-        cv2.drawContours(frame, [leftEyeHull], -1, (0, 255, 0), 1)
-        cv2.drawContours(frame, [rightEyeHull], -1, (0, 255, 0), 1)
+        cv2.drawContours(cv2_img, [leftEyeHull], -1, (0, 255, 0), 1)
+        cv2.drawContours(cv2_img, [rightEyeHull], -1, (0, 255, 0), 1)
 
-        # Check drowsiness threshold
+        # Check Drowsiness
         if ear < EAR_THRESHOLD:
-            COUNTER += 1
-            if COUNTER >= CONSEC_FRAMES:
-                cv2.putText(frame, "DROWSINESS ALERT!", (10, 30),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            cv2.putText(cv2_img, "DROWSINESS ALERT!", (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            st.error(f"⚠️ ALERT! Drowsiness Detected! EAR: {ear:.2f}")
         else:
-            COUNTER = 0
+            st.success(f"✅ Driver Active. EAR: {ear:.2f}")
 
-        cv2.putText(frame, f"EAR: {ear:.2f}", (300, 30),
+        cv2.putText(cv2_img, f"EAR: {ear:.2f}", (10, 60),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
 
-    # Convert BGR image to RGB for Streamlit display
-    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    FRAME_WINDOW.image(frame)
-
-else:
-    camera.release()
+    # Convert to RGB for Streamlit Display
+    cv2_img = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2RGB)
+    st.image(cv2_img, caption="Processed Image", use_container_width=True)
