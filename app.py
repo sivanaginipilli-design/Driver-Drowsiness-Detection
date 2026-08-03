@@ -2,80 +2,52 @@ import streamlit as st
 import cv2
 import os
 import numpy as np
+from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, RTCConfiguration
 
-# Page Configuration
 st.set_page_config(page_title="Driver Drowsiness Detection", layout="centered")
 
 st.title("🚗 Driver Drowsiness Detection System")
-st.write("Camera feed check maruyu Model loading test app.")
 
 # -------------------------------------------------------------
-# 1. MODEL LOADING FUNCTION (With Error Handling)
+# 1. MODEL CHECK
 # -------------------------------------------------------------
-@st.cache_resource
-def load_drowsiness_model():
-    # Ni repository lo unna facial landmark/model file name ikkada rayi
-    MODEL_FILE = "shape_predictor_68_face_landmarks.dat" 
+MODEL_FILE = "shape_predictor_68_face_landmarks.dat" # Ni exact file name ikkada rayi
 
-    # File Repo lo undha leda check chestundi
-    if not os.path.exists(MODEL_FILE):
-        st.error(f"⚠️ Model file '{MODEL_FILE}' GitHub repo lo dhorakaledu! Name & Path verify cheyyi.")
-        return None
-
-    try:
-        # NOTE: Nuvvu Dlib vadutunte kinda line uncomment ( # teesi ) cheyyi:
-        # import dlib
-        # predictor = dlib.shape_predictor(MODEL_FILE)
-        
-        # Temporary placeholder for testing model loading
-        predictor = f"Loaded {MODEL_FILE} successfully!"
-        return predictor
-    except Exception as e:
-        st.error(f"❌ Model load ayetappudu error ochindi: {e}")
-        return None
-
-# Load the model
-model = load_drowsiness_model()
-
-if model is not None:
-    st.success("✅ Model Ready ga undi!")
+if not os.path.exists(MODEL_FILE):
+    st.error(f"⚠️ Model file '{MODEL_FILE}' Repo lo ledu! Exact name & path verify cheyyi.")
+else:
+    st.success("✅ Model File Detected!")
 
 # -------------------------------------------------------------
-# 2. CAMERA FEED & DETECTION LOOP
+# 2. WEBRTC VIDEO PROCESSOR (Cloud & Browser Friendly)
 # -------------------------------------------------------------
+class VideoProcessor(VideoTransformerBase):
+    def transform(self, frame):
+        # Frame ni numpy array format lo teeskuntundi
+        img = frame.to_ndarray(format="bgr24")
+
+        # -----------------------------------------------------
+        # IKKADA NI DROWSINESS DETECTION LOGIC WORK AVTUNDI
+        # (Example: Face Landmark Processing, EAR calculation, etc.)
+        # -----------------------------------------------------
+
+        # Screen paina Live status overlay
+        cv2.putText(img, "Detection Active", (30, 50), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
+        return img
+
+# STUN Server configuration (Browser network camera allow cheyadaniki)
+RTC_CONFIGURATION = RTCConfiguration(
+    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+)
+
 st.subheader("📹 Real-time Camera Feed")
 
-# Streamlit Checkbox to Start/Stop Camera
-run_app = st.checkbox("Start Camera / Detection")
-
-# Streamlit Image element for Video Frames (Blackscreen fix kosam)
-FRAME_WINDOW = st.image([])
-
-if run_app:
-    # Camera access
-    cap = cv2.VideoCapture(0)
-
-    if not cap.isOpened():
-        st.error("❌ Camera open kaledu. Local system permissions check cheyyi.")
-    
-    while run_app:
-        ret, frame = cap.read()
-        
-        if not ret:
-            st.warning("⚠️ Camera frame read kaavatledu/End of stream.")
-            break
-
-        # Streamlit RGB format vadataadhi, so BGR to RGB conversion
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-        # -----------------------------------------------------
-        # 3. IKKADA NI DROWSINESS DETECTION LOGIC RASI FRAME COMPUTE CHEYYI
-        # (Example: Face detection, Eye Aspect Ratio (EAR) calculation, etc.)
-        # -----------------------------------------------------
-
-        # Display Frame in Streamlit UI
-        FRAME_WINDOW.image(frame_rgb)
-
-    cap.release()
-else:
-    st.info("👆 Camera start cheyadaniki paina 'Start Camera' checkbox click cheyyi.")
+# Streamlit WebRTC Component setup
+webrtc_streamer(
+    key="drowsiness-detection",
+    video_processor_factory=VideoProcessor,
+    rtc_configuration=RTC_CONFIGURATION,
+    media_stream_constraints={"video": True, "audio": False}
+)
