@@ -3,4 +3,4 @@ streamlit-webrtc==0.47.9
 pillow
 opencv-python-headless==4.10.0.84
 numpy
-mediapipe
+mediapipe==0.10.9
