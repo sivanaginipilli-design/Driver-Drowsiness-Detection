@@ -1,14 +1,14 @@
 import cv2
 import av
+import numpy as np
 import streamlit as st
-from streamlit_webrtc import webrtc_streamer
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 import mediapipe.python.solutions.face_mesh as mp_face_mesh
-import mediapipe.python.solutions.drawing_utils as mp_drawing
 
+st.set_page_config(page_title="Driver Drowsiness Detection", layout="centered")
 st.title("🚗 Live Driver Drowsiness Detection")
-st.write("లైవ్ వెబ్‌క్యామ్ ద్వారా కళ్ళు మూసి ఉన్నాయో లేదో చెక్ చేయండి.")
 
-# Initialize Face Mesh
+# MediaPipe Face Mesh Initialization
 face_mesh = mp_face_mesh.FaceMesh(
     max_num_faces=1,
     refine_landmarks=True,
@@ -16,39 +16,49 @@ face_mesh = mp_face_mesh.FaceMesh(
     min_tracking_confidence=0.5
 )
 
-# Video Processing Function
+LEFT_EYE = [362, 385, 387, 263, 373, 380]
+RIGHT_EYE = [33, 160, 158, 133, 153, 144]
+
+def calculate_ear(landmarks, eye_indices, img_w, img_h):
+    pts = [(int(landmarks[idx].x * img_w), int(landmarks[idx].y * img_h)) for idx in eye_indices]
+    v1 = np.linalg.norm(np.array(pts[1]) - np.array(pts[5]))
+    v2 = np.linalg.norm(np.array(pts[2]) - np.array(pts[4]))
+    h = np.linalg.norm(np.array(pts[0]) - np.array(pts[3]))
+    return (v1 + v2) / (2.0 * h)
+
 def video_frame_callback(frame: av.VideoFrame) -> av.VideoFrame:
-    # Convert WebRTC frame to OpenCV array
     img = frame.to_ndarray(format="bgr24")
+    h, w, _ = img.shape
     
-    # Convert to RGB for MediaPipe
     rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    
-    # Process the frame for face landmarks
     results = face_mesh.process(rgb_img)
     
     if results.multi_face_landmarks:
-        for face_landmarks in results.multi_face_landmarks:
-            # Draw Face Mesh on the face
-            mp_drawing.draw_landmarks(
-                image=img,
-                landmark_list=face_landmarks,
-                connections=mp_face_mesh.FACEMESH_TESSELATION,
-                landmark_drawing_spec=None,
-                connection_drawing_spec=mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=1, circle_radius=1)
-            )
-            
-            # ఇక్కడ మీరు మీ కళ్ళ (EAR) క్యాలిక్యులేషన్ లాజిక్ రాసుకోవచ్చు
-            # ఉదాహరణకు: కళ్ళు మూసుకుంటే Drowsiness Alert ఇవ్వడం
-            
-    # Return the processed frame to display on screen
+        landmarks = results.multi_face_landmarks[0].landmark
+        left_ear = calculate_ear(landmarks, LEFT_EYE, w, h)
+        right_ear = calculate_ear(landmarks, RIGHT_EYE, w, h)
+        avg_ear = (left_ear + right_ear) / 2.0
+        
+        if avg_ear < 0.22:
+            cv2.putText(img, "ALERT: DROWSY!", (30, 80),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)
+            cv2.rectangle(img, (0, 0), (w, h), (0, 0, 255), 8)
+        else:
+            cv2.putText(img, "Status: Active", (30, 80),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
+
     return av.VideoFrame.from_ndarray(img, format="bgr24")
 
-# Start WebRTC Streamer
+# Google STUN Servers Configuration
+RTC_CONFIGURATION = RTCConfiguration(
+    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+)
+
 webrtc_streamer(
     key="drowsiness-detection",
+    mode=WebRtcMode.SENDRECV,
+    rtc_configuration=RTC_CONFIGURATION,
     video_frame_callback=video_frame_callback,
-    rtc_configuration={
-        "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
-    }
+    media_stream_constraints={"video": True, "audio": False},
+    async_processing=True,
 )
