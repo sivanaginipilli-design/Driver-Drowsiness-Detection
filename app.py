@@ -1,7 +1,8 @@
 import cv2
 import numpy as np
 import streamlit as st
-import mediapipe as mp
+import mediapipe.python.solutions.face_mesh as mp_face_mesh
+import mediapipe.python.solutions.drawing_utils as mp_drawing
 
 st.set_page_config(page_title="Driver Drowsiness Detection", layout="centered")
 
