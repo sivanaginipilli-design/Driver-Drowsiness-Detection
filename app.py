@@ -1,92 +1,81 @@
-import cv2
-import numpy as np
 import streamlit as st
-from streamlit_webrtc import RTCConfiguration, WebRtcMode, webrtc_streamer
+import cv2
+import os
+import numpy as np
 
-st.set_page_config(
-    page_title="Driver Drowsiness Detection", page_icon="🚗", layout="centered"
-)
+# Page Configuration
+st.set_page_config(page_title="Driver Drowsiness Detection", layout="centered")
 
-st.title("🚗 Live Driver Drowsiness Detection System")
-st.write(
-    "క్రింద ఉన్న **START** బటన్ క్లిక్ చేసి బ్రౌజర్‌లో కెమెరా పర్మిషన్ Allow చేయండి."
-)
+st.title("🚗 Driver Drowsiness Detection System")
+st.write("Camera feed check maruyu Model loading test app.")
 
-# STUN Server Settings (లైవ్ వీడియో క్లౌడ్‌లో ప్లే అవ్వడానికి)
-RTC_CONFIGURATION = RTCConfiguration(
-    {
-        "iceServers": [
-            {"urls": ["stun:stun.l.google.com:19302"]},
-            {"urls": ["stun:stun1.l.google.com:19302"]},
-        ]
-    }
-)
+# -------------------------------------------------------------
+# 1. MODEL LOADING FUNCTION (With Error Handling)
+# -------------------------------------------------------------
+@st.cache_resource
+def load_drowsiness_model():
+    # Ni repository lo unna facial landmark/model file name ikkada rayi
+    MODEL_FILE = "shape_predictor_68_face_landmarks.dat" 
 
-# Haar Cascades
-face_cascade = cv2.CascadeClassifier(
-    cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-)
-eye_cascade = cv2.CascadeClassifier(
-    cv2.data.haarcascades + "haarcascade_eye.xml"
-)
+    # File Repo lo undha leda check chestundi
+    if not os.path.exists(MODEL_FILE):
+        st.error(f"⚠️ Model file '{MODEL_FILE}' GitHub repo lo dhorakaledu! Name & Path verify cheyyi.")
+        return None
 
+    try:
+        # NOTE: Nuvvu Dlib vadutunte kinda line uncomment ( # teesi ) cheyyi:
+        # import dlib
+        # predictor = dlib.shape_predictor(MODEL_FILE)
+        
+        # Temporary placeholder for testing model loading
+        predictor = f"Loaded {MODEL_FILE} successfully!"
+        return predictor
+    except Exception as e:
+        st.error(f"❌ Model load ayetappudu error ochindi: {e}")
+        return None
 
-class DrowsinessTransformer:
+# Load the model
+model = load_drowsiness_model()
 
-    def __init__(self):
-        self.counter = 0
+if model is not None:
+    st.success("✅ Model Ready ga undi!")
 
-    def recv(self, frame):
-        img = frame.to_ndarray(format="bgr24")
-        img = cv2.flip(img, 1)  # Mirror View
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+# -------------------------------------------------------------
+# 2. CAMERA FEED & DETECTION LOOP
+# -------------------------------------------------------------
+st.subheader("📹 Real-time Camera Feed")
 
-        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
-        eyes_found = False
+# Streamlit Checkbox to Start/Stop Camera
+run_app = st.checkbox("Start Camera / Detection")
 
-        for x, y, w, h in faces:
-            cv2.rectangle(img, (x, y), (x + w, y + h), (255, 0, 0), 2)
-            roi_gray = gray[y : y + h, x : x + w]
-            roi_color = img[y : y + h, x : x + w]
+# Streamlit Image element for Video Frames (Blackscreen fix kosam)
+FRAME_WINDOW = st.image([])
 
-            eyes = eye_cascade.detectMultiScale(roi_gray, 1.1, 3)
+if run_app:
+    # Camera access
+    cap = cv2.VideoCapture(0)
 
-            if len(eyes) > 0:
-                eyes_found = True
-                for ex, ey, ew, eh in eyes:
-                    cv2.rectangle(
-                        roi_color, (ex, ey), (ex + ew, ey + eh), (0, 255, 0), 2
-                    )
+    if not cap.isOpened():
+        st.error("❌ Camera open kaledu. Local system permissions check cheyyi.")
+    
+    while run_app:
+        ret, frame = cap.read()
+        
+        if not ret:
+            st.warning("⚠️ Camera frame read kaavatledu/End of stream.")
+            break
 
-        # నిద్రమత్తు లాజిక్
-        if len(faces) == 0 or not eyes_found:
-            self.counter += 1
-        else:
-            self.counter = 0
+        # Streamlit RGB format vadataadhi, so BGR to RGB conversion
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-        # ALERT Text గీయడం
-        if self.counter >= 15:
-            cv2.putText(
-                img,
-                "DROWSINESS ALERT!",
-                (30, 50),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                1.0,
-                (0, 0, 255),
-                3,
-            )
+        # -----------------------------------------------------
+        # 3. IKKADA NI DROWSINESS DETECTION LOGIC RASI FRAME COMPUTE CHEYYI
+        # (Example: Face detection, Eye Aspect Ratio (EAR) calculation, etc.)
+        # -----------------------------------------------------
 
-        import av
+        # Display Frame in Streamlit UI
+        FRAME_WINDOW.image(frame_rgb)
 
-        return av.VideoFrame.from_ndarray(img, format="bgr24")
-
-
-# Streamlit WebRTC Live Video Stream
-webrtc_streamer(
-    key="live-drowsiness-detection",
-    mode=WebRtcMode.SENDRECV,
-    rtc_configuration=RTC_CONFIGURATION,
-    video_processor_factory=DrowsinessTransformer,
-    media_stream_constraints={"video": True, "audio": False},
-    async_processing=True,
-)
+    cap.release()
+else:
+    st.info("👆 Camera start cheyadaniki paina 'Start Camera' checkbox click cheyyi.")
