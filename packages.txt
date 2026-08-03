@@ -1,5 +1,4 @@
 libgl1-mesa-glx
 libglib2.0-0t64
 freeglut3-dev
-cmake
 build-essential
