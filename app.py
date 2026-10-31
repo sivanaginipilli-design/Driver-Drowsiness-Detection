@@ -11,7 +11,15 @@ import streamlit as st
 from imutils import face_utils
 from scipy.spatial import distance as dist
 from streamlit_webrtc import VideoProcessorBase, WebRtcMode, webrtc_streamer
+import os
+import gdown
 
+MODEL_PATH = "shape_predictor_68_face_landmarks.dat"
+
+if not os.path.exists(MODEL_PATH):
+    file_id = "1Ftih_JTHoNA3LCwQ2qTvRg9XlCta0nT7"
+    url = f"https://drive.google.com/uc?id={file_id}"
+    gdown.download(url, MODEL_PATH, quiet=False)
 APP_DIR = Path(__file__).resolve().parent
 PREDICTOR_PATH = APP_DIR / "shape_predictor_68_face_landmarks.dat"
 ALARM_PATH = APP_DIR / "alaram.mp3"
